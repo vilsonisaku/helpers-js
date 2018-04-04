@@ -143,33 +143,60 @@ function LiveBetting(){
         return false;
     }
 
-    this.updateOdds = function(data,defaultData=false){
+    this.updateOdds = function(data,defaultData=false,parentHtml=false){
         if (data == undefined || this.liveData == undefined) return;
 
         if (!defaultData) defaultData = this.liveData;
         if (data.constructor == Array) {
+            if (!liveBetting.dataSelection) return;
             var keys = Object.keys(liveBetting.dataSelection);
-            for (var i = 0; i < data.length; i++) {
+            for (var d = 0; d < defaultData.length; d++) {
+                delete defaultData[d].active;
+            }
+            var defaultIds = [];
+            for (var i = 0; i < data.length; i++) { // add new values html
                 var cont = false;
                 for (var k in keys) {
                     var key=keys[k];
                     if (data[i].hasOwnProperty(key)) {
                         var index = -1;
-                        for (var n in defaultData) {
-                            if(defaultData[n][key].toString().includes(data[i][key].toString())){
-                                index = n;
-                                break;
-                            }
+                         for (var n = 0; n < defaultData.length; n++) {
+                            
+                            if (defaultData[n].hasOwnProperty(key)) {
+
+                                if (key == "GroupId") {
+                                    //console.log(defaultData[n][key])
+                                    //console.log(data[i][key])
+                                    if(defaultData[n][key] == data[i][key]){
+                                        if (defaultIds.indexOf(defaultData[n][key]) == -1) {
+                                            defaultIds.push(defaultData[n][key])
+                                        }
+                                    }
+                                }
+                                if(defaultData[n][key] == data[i][key]){
+                                    defaultData[n].active='true';
+                                    index = n;
+                                    break;
+                                }
+                                
+                            }                            
                         }
+
                         if (index == -1) {
-                            defaultData.push(data[i]);
-                            console.log('compare 2 below data...')
-                            console.log(index)
-                            console.log(key)
-                            console.log(data[i][key])
-                            console.log(data[i])
-                            console.log(defaultData)
-                            if(defaultData[0].UpdateHTML) defaultData[0].UpdateHTML.parentElement.live(data[i]).create( liveBetting.dataSelection[key] );
+                            
+                            if(defaultData[0]) {
+                                if(defaultData[0].UpdateHTML) {
+                                    data[i].active = true;
+                                    defaultData.push(data[i]);
+                                    if(parentHtml) parentHtml.live(data[i]).create( liveBetting.dataSelection[key],"update");
+                                }
+                            } else {
+                                data[i].active = true;
+                                defaultData.push(data[i]);
+                                if(parentHtml) parentHtml.live(data[i]).create( liveBetting.dataSelection[key],"update");
+                                //console.log(parentHtml);
+                                //console.log('there is no html data at ' +data[i][key])
+                            }
                             cont=true;
                             break;
                         }
@@ -177,6 +204,17 @@ function LiveBetting(){
                 }
                 if (cont) continue;
                 this.updateOdds(data[i],defaultData[i]);
+            }
+            for (var t = 0; t < defaultData.length; t++) {
+                
+                if(!defaultData[t].hasOwnProperty('active')){
+                    if (key == "GroupId") {
+                        console.log(defaultIds)
+                    }
+                    //console.log(defaultData[t])
+                    if(defaultData[t].UpdateHTML) defaultData[t].UpdateHTML.remove();
+                    defaultData.splice(t,1);
+                }
             }
         } else if (data.constructor == Object) {
             var updateKeys = {};
@@ -187,7 +225,7 @@ function LiveBetting(){
             for(var key in data){
                 if (data[key] == null) continue; // when the value is null
                 if (data[key].constructor == Array || data[key].constructor == Object ) {
-                    this.updateOdds(data[key],defaultData[key]);
+                    this.updateOdds(data[key],defaultData[key],defaultData.UpdateHTML);
                     continue;
                 }
                 if (defaultData.hasOwnProperty(key)) defaultData[key] = data[key];
@@ -245,7 +283,7 @@ function LiveBetting(){
         var index=-1;
         for(var key in filter){
             var value = filter[key];
-            if (value == 'id') {                
+            if (value == 'id') {   
                 index = this.indexOfObject(convertedData,key,match[key]);
             }
             if (typeof value != 'object') res[key] = match[key];
@@ -273,6 +311,9 @@ function LiveBetting(){
                 } else {
                     res[key] = match;
                 }
+            }
+            if (value == 'id') {
+                delete match[key];
             }
         }
 
@@ -461,7 +502,7 @@ Element.prototype.live = function(liveData){
             if(!path) path=[];
             var attr = {};
             for (var k in attributes) {
-                if (attributes[k].constructor == Array && attributes[k][0] == "id") {
+                if (attributes[k].constructor == Array && attributes[k][0] == "id" && append != "update") {
                     if(!liveBetting.dataSelection) liveBetting.dataSelection = {};
                     if (!liveBetting.dataSelection.hasOwnProperty(k)) liveBetting.dataSelection[k] = attributes;
                 }
@@ -524,7 +565,7 @@ Element.prototype.live = function(liveData){
                             path.push(key);
                             path.push(i);
                             next[i] = this.create(attr[key],false,data[key][i],path,recursionIndex); // here pass all objects
-                            if(append) path = [];
+                            if(append==true || append == "update") path = [];
                             if(recursionIndex==2) {
                                 path = [path[0],path[1]];
                             }
@@ -581,7 +622,7 @@ Element.prototype.live = function(liveData){
                     first.appendChild(next[key]);
                 }
             } 
-            if (append) {
+            if (append==true || append == "update") {
                 liveBetting.liveData.push(data);
                 self.appendChild(first);
             }
@@ -616,7 +657,7 @@ function load(){
             for (var i = 0; i < list.length; i++) {
                 // create group
                 var group = div.live(list[i]).create({
-                    GroupId:'id',
+                    GroupId:['id'],
                     GroupDesc:['span','value'],
                     ActionClass:'group gr_{GroupId}',
                     ActionBuildMenu:[{
@@ -682,7 +723,6 @@ function load(){
                                                 element:'a',
                                                 ActionOnClick:"javascript:clickOdd(this,'{GamePkID}','','','1-20','',{ManiID},'', true, 1)",
                                                 ActionClass:'odd-val {GamePkID}',
-
                                                 ActionLockValues:[['glyphicon glyphicon-lock','','0.00','-']],
                                                 ActionUpDown:[true], // when use [] dont print as attribute
                                                 value:''
@@ -699,6 +739,7 @@ function load(){
         }
         liveBetting.startInterval(4000,{METHOD:'LIVE_LISTVIEW',type:'json'},function(data){
             var list = data._ListData;
+            if (list == undefined) return;
             list = liveBetting.convertDataByGroup(list,{
                 GroupId:'id',
                 GroupDesc:'',
@@ -708,9 +749,10 @@ function load(){
                     MatchList:{}
                 }
             });
-            liveBetting.updateOdds(list);
+            liveBetting.updateOdds(list,false,div);
         });
-        document.getElementById('right_column').prepend(div);
+        document.getElementsByClassName('leftSide')[0].innerHTML = "";
+        document.getElementsByClassName('leftSide')[0].prepend(div);
         console.log(div);
     });
 }
