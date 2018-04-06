@@ -143,76 +143,51 @@ function LiveBetting(){
         return false;
     }
 
-    this.updateOdds = function(data,defaultData=false,parentHtml=false){
+    this.updateOdds = function(data,defaultData,parentHtml=false){
         if (data == undefined || this.liveData == undefined) return;
 
-        if (!defaultData) defaultData = this.liveData;
+        if (defaultData === false) defaultData = this.liveData;
         if (data.constructor == Array) {
-            if (!liveBetting.dataSelection) return;
-            var keys = Object.keys(liveBetting.dataSelection);
-            for (var d = 0; d < defaultData.length; d++) {
-                delete defaultData[d].active;
-            }
-            var defaultIds = [];
-            for (var i = 0; i < data.length; i++) { // add new values html
-                var cont = false;
-                for (var k in keys) {
-                    var key=keys[k];
-                    if (data[i].hasOwnProperty(key)) {
-                        var index = -1;
-                         for (var n = 0; n < defaultData.length; n++) {
-                            
-                            if (defaultData[n].hasOwnProperty(key)) {
-
-                                if (key == "GroupId") {
-                                    //console.log(defaultData[n][key])
-                                    //console.log(data[i][key])
-                                    if(defaultData[n][key] == data[i][key]){
-                                        if (defaultIds.indexOf(defaultData[n][key]) == -1) {
-                                            defaultIds.push(defaultData[n][key])
-                                        }
-                                    }
-                                }
-                                if(defaultData[n][key] == data[i][key]){
-                                    defaultData[n].active='true';
-                                    index = n;
-                                    break;
-                                }
-                                
-                            }                            
-                        }
-
-                        if (index == -1) {
-                            
-                            if(defaultData[0]) {
-                                if(defaultData[0].UpdateHTML) {
-                                    data[i].active = true;
-                                    defaultData.push(data[i]);
-                                    if(parentHtml) parentHtml.live(data[i]).create( liveBetting.dataSelection[key],"update");
-                                }
-                            } else {
-                                data[i].active = true;
-                                defaultData.push(data[i]);
-                                if(parentHtml) parentHtml.live(data[i]).create( liveBetting.dataSelection[key],"update");
-                                //console.log(parentHtml);
-                                //console.log('there is no html data at ' +data[i][key])
-                            }
-                            cont=true;
-                            break;
-                        }
-                    }
+            if (!this.dataSelection) return; //liveBetting.liveData
+            var keys = Object.keys(this.dataSelection);
+            var ids = [];
+            var key=false;
+            if(!data[0]) {
+                for(var e in defaultData){
+                    defaultData[e].UpdateHTML.remove();
+                    defaultData.splice(e,1);
                 }
-                if (cont) continue;
-                this.updateOdds(data[i],defaultData[i]);
+                return;
             }
-            for (var t = 0; t < defaultData.length; t++) {
+            for (var ii = 0; ii < keys.length; ii++) {
+                if(data[0][keys[ii]]){
+                    key = keys[ii];
+                    break;
+                }
+            }
+            for (var i = 0; i < data.length; i++) { // add new values html
+
+                var defaultIndex = this.indexOfObject(defaultData,key,data[i][key]);
+
+                if (defaultIndex > -1) {
+                    this.updateOdds(data[i],defaultData[defaultIndex],defaultData[defaultIndex].UpdateHTML ? defaultData[defaultIndex].UpdateHTML : "undefined");
+                } else {
+                    var addData = data[i];
+                    var selections = this.dataSelection[key];
+                    console.log(addData)
+                    parentHtml.live(addData).create( selections,"update");
+                    //parentHtml.appendChild(htmlData);
+                    defaultData.push(addData);
+                }
+                ids.push(data[i][key]);
                 
-                if(!defaultData[t].hasOwnProperty('active')){
-                    if (key == "GroupId") {
-                        console.log(defaultIds)
-                    }
-                    //console.log(defaultData[t])
-                    if(defaultData[t].UpdateHTML) defaultData[t].UpdateHTML.remove();
+            }
+
+            for (var t = 0; t < defaultData.length; t++) { // loop to remove the old
+                if(!defaultData[t][key]) console.log("theres is undefined defaultData")
+                if(ids.indexOf(defaultData[t][key]) == -1){
+                    removeData = defaultData[t];
+                    if(removeData.UpdateHTML) removeData.UpdateHTML.remove();
                     defaultData.splice(t,1);
                 }
             }
@@ -225,7 +200,7 @@ function LiveBetting(){
             for(var key in data){
                 if (data[key] == null) continue; // when the value is null
                 if (data[key].constructor == Array || data[key].constructor == Object ) {
-                    this.updateOdds(data[key],defaultData[key],defaultData.UpdateHTML);
+                    this.updateOdds(data[key],defaultData[key],defaultData.UpdateHTML ? defaultData.UpdateHTML : "undefined");
                     continue;
                 }
                 if (defaultData.hasOwnProperty(key)) defaultData[key] = data[key];
@@ -312,6 +287,7 @@ function LiveBetting(){
                     res[key] = match;
                 }
             }
+
             if (value == 'id') {
                 delete match[key];
             }
@@ -623,7 +599,7 @@ Element.prototype.live = function(liveData){
                 }
             } 
             if (append==true || append == "update") {
-                liveBetting.liveData.push(data);
+                if(append != "update") liveBetting.liveData.push(data);
                 self.appendChild(first);
             }
             return first;
@@ -680,7 +656,7 @@ function load(){
                             ScoreDetails:['li',{value:[{element:'span',value:function(){
                                 return {ScoreDetails:function(html,value){
                                         var score = html.getElementsByClassName('results')[0];
-                                        arrScore = value.split('|');
+                                        var arrScore = value.split('|');
                                         for (var k in arrScore){
                                             var span = el('span',arrScore[k]);
                                             score.appendChild(span)
@@ -709,7 +685,7 @@ function load(){
 
                             }}],
                             Class_Data:{
-                                ClassOrder:['id'],
+                                ClassId:['id'],
                                 ActionParentElement:'li',
                                 ClassDesc:['span','value'],
                                 Odds_Data:{
@@ -758,3 +734,91 @@ function load(){
 }
 
 load();
+
+function JvScore(){
+
+    this.buildScoreDetails = function(groupId,tempScore, type){
+        var realScore = ''
+        var tempScore = tempScore ? tempScore : "0-0";
+        switch(groupId.toString()){
+            case "1":
+                realScore = calculateScoreSum(tempScore)
+                break;
+            case "2":
+                if (type == "full") {
+                    realScore = calculateScoreFull(tempScore)
+                } else {
+                    realScore = calculateScoreDisplay(tempScore)        
+                }
+                break;
+            case "7":
+                if (type == "full") {
+                    realScore = calculateScoreFull(tempScore)
+                } else {
+                    realScore = calculateScoreDisplay(tempScore)        
+                }
+                break;
+            case "8":
+                realScore = displayLastScore(tempScore)
+                break;
+            case "17":
+                realScore = calculateScoreSum(tempScore)
+                break;
+        }
+        if(realScore.indexOf('-')){ realScore = realScore.split('-').join('<br/>')};
+        if(realScore.indexOf(':')){ realScore = realScore.split(':').join('<br/>')};
+        return realScore;
+    }
+
+    function calculateScoreSum(tempScore){
+        var homeScore = 0
+        var awayScore = 0
+        var splittedScore = tempScore.split('|')
+        for(var i = 0; i< splittedScore.length; i++){
+            var subSplittedScore = splittedScore[i].split('-');
+            if(subSplittedScore.length > 1){
+                homeScore += parseInt(subSplittedScore[0], 10)
+                awayScore += parseInt(subSplittedScore[1], 10)
+            }
+        }
+        return homeScore + '-' + awayScore;
+    }
+
+    function calculateScoreDisplay(tempScore){
+        resScore = '0:0'
+        var splittedScore = tempScore.split('|')
+        resScore = ''
+        for(var i = 0; i < splittedScore.length; i++){
+            if(i > 0){
+                resScore += ' '
+            }
+            var subSplittedScore = splittedScore[i].split('-');
+            resScore = subSplittedScore[0] + ':' + subSplittedScore[1];
+        }
+        return resScore;
+    }
+
+    function calculateScoreFull(tempScore){
+        resScore = '0-0'
+        var splittedScore = tempScore.split('|')
+        resScore = ''
+        for(var i = 0; i < splittedScore.length; i++){
+            if(i > 0){
+                resScore += ' | '
+            }
+            var subSplittedScore = splittedScore[i].split('-');
+            resScore += subSplittedScore[0] + '-' + subSplittedScore[1];
+        }
+        return resScore;    
+    }
+
+    function displayLastScore(tempScore){
+        var resScore = '0-0'
+        var splittedScore = tempScore.split('|')
+        var len = splittedScore.length
+        resScore = splittedScore[len-1];
+        return resScore;
+    }
+}
+
+var jvScore = new JvScore();
