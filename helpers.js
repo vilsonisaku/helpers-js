@@ -36,6 +36,7 @@ function Http(){
     }
 }
 
+//create element with attr and text
 this.el = function(type,attributes,text){
     this.helpers = new function(){
         this.el;
@@ -170,12 +171,11 @@ function LiveBetting(){
                 var defaultIndex = this.indexOfObject(defaultData,key,data[i][key]);
 
                 if (defaultIndex > -1) {
-                    this.updateOdds(data[i],defaultData[defaultIndex],defaultData[defaultIndex].UpdateHTML ? defaultData[defaultIndex].UpdateHTML : "undefined");
+                    this.updateOdds(data[i],defaultData[defaultIndex],defaultData[defaultIndex].UpdateHTML);
                 } else {
                     var addData = data[i];
                     var selections = this.dataSelection[key];
-                    console.log(addData)
-                    parentHtml.live(addData).create( selections,"update");
+                    if(parentHtml) parentHtml.live(addData).create( selections,"update");
                     //parentHtml.appendChild(htmlData);
                     defaultData.push(addData);
                 }
@@ -184,7 +184,6 @@ function LiveBetting(){
             }
 
             for (var t = 0; t < defaultData.length; t++) { // loop to remove the old
-                if(!defaultData[t][key]) console.log("theres is undefined defaultData")
                 if(ids.indexOf(defaultData[t][key]) == -1){
                     removeData = defaultData[t];
                     if(removeData.UpdateHTML) removeData.UpdateHTML.remove();
@@ -200,7 +199,7 @@ function LiveBetting(){
             for(var key in data){
                 if (data[key] == null) continue; // when the value is null
                 if (data[key].constructor == Array || data[key].constructor == Object ) {
-                    this.updateOdds(data[key],defaultData[key],defaultData.UpdateHTML ? defaultData.UpdateHTML : "undefined");
+                    this.updateOdds(data[key],defaultData[key],defaultData.UpdateHTML);
                     continue;
                 }
                 if (defaultData.hasOwnProperty(key)) defaultData[key] = data[key];
@@ -354,7 +353,6 @@ Element.prototype.live = function(liveData){
                 var ob = attr();
                 var key = Object.keys(ob)[0];
                 setTimeout(function(){
-                    console.log(data.UpdateHTML)
                     ob[key](data.UpdateHTML,data[key]); // execute the function
                 });
                 return attr;
@@ -442,8 +440,6 @@ Element.prototype.live = function(liveData){
                 }
             }
             if (action.buildmenu != undefined) {
-                console.log('action build menu');
-                console.log(action.buildmenu);
                 if (action.buildmenu[0].constructor == Object) {
 
                 }
@@ -471,30 +467,48 @@ Element.prototype.live = function(liveData){
             return text;
         }
 
+        this.checkLimit = function(limit,objData){ // check limit data
+            if (limit) {
+                var arrLimit =limit[0].split('&');
+                for (var y  in arrLimit) {
+                    var limitData = arrLimit[y].split('='); 
+                    if (objData.hasOwnProperty(limitData[0])) { // check the key
+                        if (objData[limitData[0]] == limitData[1]) {
+                            return true;
+                        }
+                    }
+                }
+            } else {
+                return true;
+            }
+        }
+
         this.create = function(attributes,append=true,data=false,path=false,recursionIndex=0){ // generate html from data 
             var next = [];
             recursionIndex++;
             var data = data ? data : liveData;
             if(!path) path=[];
-            var attr = {};
+            var dataAttr = {};
             for (var k in attributes) {
                 if (attributes[k].constructor == Array && attributes[k][0] == "id" && append != "update") {
                     if(!liveBetting.dataSelection) liveBetting.dataSelection = {};
                     if (!liveBetting.dataSelection.hasOwnProperty(k)) liveBetting.dataSelection[k] = attributes;
                 }
-                attr[k] = attributes[k];
+                dataAttr[k] = attributes[k];
             }
-            var build = this.buildAction(attr,data,path);
-            attr=build.attr;
+            var build = this.buildAction(dataAttr,data,path);
+            var attr=build.attr;
+
+            if(build.action.limit && append != "update" && !this.checkLimit(build.action.limit,data)) return false;
+
             var ID ='';
             if(attr['value'] == undefined) attr['value'] = [];
 
             for (var key in data){
-
+                
                 if (attr.hasOwnProperty(key)) {
                     if (attr[key].constructor == Array) {
                         var firstKey = attr[key][0];
-
                         if (typeof attr[key][1] != "undefined" && attr[key][1].constructor == Object) { // add html with attributes and texts
                             var obAttr = attr[key][1];
                             if (obAttr.value == undefined) continue;
@@ -535,19 +549,20 @@ Element.prototype.live = function(liveData){
                         continue;
                     }
                     if (attr[key].constructor == Object){ // check next objects
-                        var length = build.action.limit ? build.action.limit : data[key].length;
-                        
+                        var length = data[key].length;
                         for (var i = 0; i < length; i++) {
+                            var objData = data[key][i];
+
                             path.push(key);
                             path.push(i);
-                            next[i] = this.create(attr[key],false,data[key][i],path,recursionIndex); // here pass all objects
+                            var nextEl = this.create(attr[key],false,objData,path,recursionIndex); // here pass all objects
+                            if(nextEl) next.push(nextEl);
                             if(append==true || append == "update") path = [];
                             if(recursionIndex==2) {
                                 path = [path[0],path[1]];
                             }
                             if(recursionIndex==3) {
                                  path = [path[0],path[1],path[2],path[3]];
-                                 
                             }
                         }
 
@@ -598,8 +613,12 @@ Element.prototype.live = function(liveData){
                     first.appendChild(next[key]);
                 }
             } 
-            if (append==true || append == "update") {
-                if(append != "update") liveBetting.liveData.push(data);
+            if (append == "update") {
+                 if (this.checkLimit(build.action.limit,data))
+                    self.appendChild(first);
+            }
+            if (append==true) {
+                liveBetting.liveData.push(data);
                 self.appendChild(first);
             }
             return first;
@@ -627,14 +646,12 @@ function load(){
                     MatchList:{}
                 }
             });
-            console.log(list);
             var div = document.createElement('div');
             div.className = "test-live-data";
             for (var i = 0; i < list.length; i++) {
                 // create group
                 var group = div.live(list[i]).create({
                     GroupId:['id'],
-                    GroupDesc:['span','value'],
                     ActionClass:'group gr_{GroupId}',
                     ActionBuildMenu:[{
                         ActionParentElement:'ul',
@@ -646,48 +663,26 @@ function load(){
                     ActionParentElement:'ul',
                     ManiList:{
                         ManiID:['id'],
-                        ManiDesc:['span',{class:'title',value:''}],
                         ActionClass:'mani {ManiID}',
                         ActionParentElement:'li',
                         MatchList:{
                             BrMatchid:['id'],
-                            Current_Time:['li',{class:'time',value:[{element:'span', class:'time-text',value:'{Current_Time} min'}] }],
-                            MatchName:['li',{class:'title',value:''}],
-                            ScoreDetails:['li',{value:[{element:'span',value:function(){
+                            Current_Time:['li',{class:'timeLive',value:[{element:'span', class:'time-text',value:'{Current_Time} \''}] }],
+                            ScoreDetails:['li',{class:'results',value:[{element:'span',value:function(){
                                 return {ScoreDetails:function(html,value){
-                                        var score = html.getElementsByClassName('results')[0];
-                                        var arrScore = value.split('|');
-                                        for (var k in arrScore){
-                                            var span = el('span',arrScore[k]);
-                                            score.appendChild(span)
-                                        }
-                                        console.log(value);
+                                        updateResults(html,value)
                                 }}
-                            }, class:'results'}] }],
-                            ActionLimit:[1],
+                            }, class:'results-text'}] }],
+                            MatchName:['li',{class:'matchLive',value:{value:'',element:'span',ActionOnClick:"document.location.href = document.location.origin+'/Holder.bet?page=livebetting&event={BrMatchid}'"}}],
                             ActionParentElement:'ul',
                             ActionClass:'match {BrMatchid}',
-                            ActionUpdate:[{Current_Time:"time-text"},{ScoreDetails:function(html,value){
-                                var resultHtml = html.getElementsByClassName('results')[0];
-                                var firstResult =  resultHtml.children[0] ? resultHtml.children[0].innerText : '';
-                                var val = value.split('|');
-                                if (firstResult[0] != val[0]) {
-                                    resultHtml.innerText="";
-                                    var first = document.createElement('span');
-                                    first.innerText = val[0];
-                                    resultHtml.appendChild(first);
-                                    if (val[1] != undefined) {
-                                        var second = document.createElement('span');
-                                        second.innerText = val[1];
-                                        resultHtml.appendChild(second)
-                                    }
-                                }
-
-                            }}],
+                            ActionUpdate:[{Current_Time:updateCurrentTime},{ScoreDetails:updateResults}],
                             Class_Data:{
                                 ClassId:['id'],
                                 ActionParentElement:'li',
-                                ClassDesc:['span','value'],
+                                ClassDesc:['li',{class:'stats',value:{element:'i',ActionOnClick:'openBRStats({ManiID} , {BrMatchid})',value:' ',class:'glyphicon glyphicon-stats'}}],
+                                ActionClass:'odds',
+                                ActionLimit:["ClassId=3&ClassId=89&ClassId=63&ClassId=2"],
                                 Odds_Data:{
                                     GamePkID:['id'],
                                     ActionParentElement:'ul',
@@ -697,7 +692,7 @@ function load(){
                                             class:'odd',
                                             value:{
                                                 element:'a',
-                                                ActionOnClick:"javascript:clickOdd(this,'{GamePkID}','','','1-20','',{ManiID},'', true, 1)",
+                                                ActionOnClick:"document.location.href = document.location.origin+'/Holder.bet?page=livebetting&event={BrMatchid}&mani={ManiID}&quote={GamePkID}&cod={cod}&offerNumber={OfferNumber}'",
                                                 ActionClass:'odd-val {GamePkID}',
                                                 ActionLockValues:[['glyphicon glyphicon-lock','','0.00','-']],
                                                 ActionUpDown:[true], // when use [] dont print as attribute
@@ -707,7 +702,7 @@ function load(){
                                     ActionUpdate:[{GameOdd:'odd-val'}],
                                     GameName:['li',{class:'name',value:''}],
                                 },
-                                ActionAll:['li',{class:'fa fa-chevron-down'}],
+                                //ActionAll:['li',{class:'fa fa-chevron-down'}],
                             }
                         }
                     }
@@ -727,17 +722,28 @@ function load(){
             });
             liveBetting.updateOdds(list,false,div);
         });
-        document.getElementsByClassName('leftSide')[0].innerHTML = "";
-        document.getElementsByClassName('leftSide')[0].prepend(div);
-        console.log(div);
+        document.getElementsByClassName('statsBoxContent')[0].innerHTML = "";
+        document.getElementsByClassName('statsBoxContent')[0].prepend(div);
     });
 }
 
 load();
 
+function updateResults(html,value){
+    var resultHtml = html.getElementsByClassName('results-text')[0];
+    resultHtml.innerText= jvScore.buildScoreDetails(1,value,false,'-');
+}
+
+
+function updateCurrentTime(html,value){
+    var timeHtml = html.getElementsByClassName('time-text')[0];
+    timeHtml.innerText = value + " '";
+}
+
+
 function JvScore(){
 
-    this.buildScoreDetails = function(groupId,tempScore, type){
+    this.buildScoreDetails = function(groupId,tempScore, type,middle='<br/>'){
         var realScore = ''
         var tempScore = tempScore ? tempScore : "0-0";
         switch(groupId.toString()){
@@ -765,8 +771,8 @@ function JvScore(){
                 realScore = calculateScoreSum(tempScore)
                 break;
         }
-        if(realScore.indexOf('-')){ realScore = realScore.split('-').join('<br/>')};
-        if(realScore.indexOf(':')){ realScore = realScore.split(':').join('<br/>')};
+        if(realScore.indexOf('-')){ realScore = realScore.split('-').join(middle)};
+        if(realScore.indexOf(':')){ realScore = realScore.split(':').join(middle)};
         return realScore;
     }
 
